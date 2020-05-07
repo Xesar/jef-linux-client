@@ -158,6 +158,8 @@ int main(int argc, char *argv[]){
 				recv_file(client_socket, argv[i+2], file_size);
 			}
 
+			close(client_socket);
+
 		}else if(argv[1][1]=='n'){
 			short file_count;
 			if(argc==2)
@@ -181,7 +183,9 @@ int main(int argc, char *argv[]){
 				file_size = recv_file_size(client_socket);
 				recv_file(client_socket, file_name, file_size);
 			}
+
 			close(client_socket);
+
 		}else if(argv[1][1]=='l'){
 			if(argc!=2)
 				invalid_args();
@@ -206,25 +210,30 @@ int main(int argc, char *argv[]){
 		short client_socket = get_conn();
 		handshake(client_socket, FILE_UP);
 
-		char *file_name = argv[1];
-		fprintf(stdout, "file name: %s\n", file_name);
-		short fd = open(file_name, O_RDONLY);
-		if(fd<0)
-			error("opening file", 1);
-		struct stat file_stat;
-		if(fstat(fd, &file_stat)<0)
-			error("fstat", 1);
+		short file_amount = argc-1;
+		send_file_amount(client_socket, file_amount);
 
-		int file_size = file_stat.st_size;
+		for(int i=0; i<file_amount; i++){
+			char *file_name = argv[i+1];
+			fprintf(stdout, "file name: %s\n", file_name);
+			short fd = open(file_name, O_RDONLY);
+			if(fd<0)
+				error("opening file", 1);
+			struct stat file_stat;
+			if(fstat(fd, &file_stat)<0)
+				error("fstat", 1);
 
-		send_file_name(client_socket, file_name);
+			int file_size = file_stat.st_size;
 
-		send_file_size(client_socket, file_size);
+			send_file_name(client_socket, file_name);
 
-		send_file(client_socket, fd, file_size);
+			send_file_size(client_socket, file_size);
 
-		printf("\n");
-		close(client_socket);
+			send_file(client_socket, fd, file_size);
+
+			printf("\n");
+			close(client_socket);
+		}
 	}
 	return 0;
 }
