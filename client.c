@@ -15,10 +15,14 @@
 
 #define PORT_NO			20001
 #define SERVER_IP		"127.0.0.1"
+
 #define FILE_UP			0
 #define FILE_DOWN		1
 #define FILE_NEWEST		2
 #define FILE_LIST		3
+
+#define F_HDR			0
+#define END_HDR			9
 
 void error(const char *msg, char end){
 	perror(msg);
@@ -137,6 +141,15 @@ void recv_file(short socket_id, char * file_name, int file_size){
 	fclose(rec_file);
 }
 
+short recv_header(short socket_id){
+	short header;
+	ssize_t len = recv(socket_id, &header, sizeof(header), 0);
+	if(len<0)
+		error("handshake", 1);
+	header ^= 0xf110;
+	return header;
+}
+
 int main(int argc, char *argv[]){
 	if(argc==1)
 		return print_help();
@@ -196,14 +209,14 @@ int main(int argc, char *argv[]){
 			short client_socket = get_conn();
 			handshake(client_socket, FILE_LIST);
 
-			short file_amount = recv_file_amount(client_socket);
 			char file_name[256];
 			int file_size;
-			printf("%d files: \n", file_amount);
-			for(int i=0; i<file_amount; i++){
+			short header = recv_header(client_socket);
+			while(header==F_HDR){
 				strcpy(file_name, recv_file_name(client_socket));
 				file_size = recv_file_size(client_socket);
-				printf("%d: %s, %d bytes", i+1, file_name, file_size);
+				printf("%s\t\t->\t%d bytes\n", file_name, file_size);
+				header = recv_header(client_socket);
 			}
 
 			close(client_socket);
