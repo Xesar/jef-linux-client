@@ -89,9 +89,9 @@ void send_file(short socket_id, short fd, int file_size){
 	long offset = 0;
 	int remain_data = file_size;
 	int sent_bytes = 0;
-	while(((sent_bytes = sendfile(socket_id, fd, &offset, 1024))>0) && (remain_data>0)){
+	while(((sent_bytes = sendfile(socket_id, fd, &offset, 256))>0) && (remain_data>0)){
 		remain_data -= sent_bytes;
-		printf("\rsent: %d\tdone: %.2f%%", sent_bytes, 100.0-(remain_data*1.0)/(file_size*1.0)*100.0);
+		printf("sent: %d\tdone: %.2f%%\n", sent_bytes, 100.0-(remain_data*1.0)/(file_size*1.0)*100.0);
 	}
 }
 
@@ -131,7 +131,7 @@ void recv_file(short socket_id, char * file_name, int file_size){
 	while((remain_data>0) && (len = recv(socket_id, buffer, sizeof(buffer), 0))>0){
 		fwrite(buffer, sizeof(char), len, rec_file);
 		remain_data -= len;
-		printf("\rreceived: %d bytes, %d bytes remaining", len, remain_data);
+		printf("received: %d bytes, %d bytes remaining\n", len, remain_data);
 	}
 	printf("\n");
 	fclose(rec_file);
@@ -153,9 +153,12 @@ int main(int argc, char *argv[]){
 			send_file_amount(client_socket, file_count);
 
 			int file_size;
+			char *file_name;
 			for(int i=0; i<file_count; i++){
+				file_name = argv[i+2];
+				send_file_name(client_socket, file_name);
 				file_size = recv_file_size(client_socket);
-				recv_file(client_socket, argv[i+2], file_size);
+				recv_file(client_socket, file_name, file_size);
 			}
 
 			close(client_socket);
@@ -215,10 +218,10 @@ int main(int argc, char *argv[]){
 		short file_amount = argc-1;
 		send_file_amount(client_socket, file_amount);
 
-		for(int i=0; i<file_amount; i++){
-			char *file_name = argv[i+1];
-			fprintf(stdout, "file name: %s\n", file_name);
-			short fd = open(file_name, O_RDONLY);
+		for(short i=0; i<file_amount; i++){
+			char * file_name = argv[i+1];
+
+			int fd = open(file_name, O_RDONLY);
 			if(fd<0)
 				error("opening file", 1);
 			struct stat file_stat;
@@ -226,18 +229,14 @@ int main(int argc, char *argv[]){
 				error("fstat", 1);
 
 			int file_size = file_stat.st_size;
-
 			send_file_name(client_socket, file_name);
-
 			send_file_size(client_socket, file_size);
-
 			send_file(client_socket, fd, file_size);
-
-			printf("\n");
+			close(fd);
 		}
-		
+
 		close(client_socket);
-		
+
 	}
 	return 0;
 }
