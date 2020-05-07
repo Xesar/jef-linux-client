@@ -134,7 +134,7 @@ void recv_file(short socket_id, char * file_name, int file_size){
 		printf("\rreceived: %d bytes, %d bytes remaining", len, remain_data);
 	}
 	printf("\n");
-	close(socket_id);
+	fclose(rec_file);
 }
 
 int main(int argc, char *argv[]){
@@ -202,6 +202,8 @@ int main(int argc, char *argv[]){
 				file_size = recv_file_size(client_socket);
 				printf("%d: %s, %d bytes", i+1, file_name, file_size);
 			}
+
+			close(client_socket);
 			
 		}else{
 			invalid_args();
@@ -232,8 +234,10 @@ int main(int argc, char *argv[]){
 			send_file(client_socket, fd, file_size);
 
 			printf("\n");
-			close(client_socket);
 		}
+		
+		close(client_socket);
+		
 	}
 	return 0;
 }
