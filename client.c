@@ -44,8 +44,8 @@ void invalid_args(){
 	exit(-1);
 }
 
-int get_conn(){
-	int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+short get_conn(){
+	short client_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if(client_socket<0)
 		error("socket", 1);
 	
@@ -60,91 +60,169 @@ int get_conn(){
 	return client_socket;
 }
 
-void handshake(int s_sock, unsigned char f_type){
-	short header = 0x1ef0 | (f_type & 0xf);
-	ssize_t len = send(s_sock, &header, sizeof(header), 0);
+void handshake(short socket_id, unsigned char h_type){
+	short header = 0x1ef0 | (h_type & 0xf);
+	ssize_t len = send(socket_id, &header, sizeof(header), 0);
 	if(len<0)
 		error("handshake", 1);
+}
+
+void send_file_amount(short socket_id, short file_amount){
+	ssize_t len = send(socket_id, &file_amount, sizeof(short), 0);
+	if(len<0)
+		error("file amount: ",1);
+}
+
+void send_file_name(short socket_id, char * file_name){
+	ssize_t len = send(socket_id, file_name, 256, 0);
+	if(len<0)
+		error("file name", 1);
+}
+
+void send_file_size(short socket_id, int file_size){
+	ssize_t len = send(socket_id, &file_size, sizeof(file_size), 0);
+	if(len<0)
+		error("file name", 1);
+}
+
+void send_file(short socket_id, short fd, int file_size){
+	long offset = 0;
+	int remain_data = file_size;
+	int sent_bytes = 0;
+	while(((sent_bytes = sendfile(socket_id, fd, &offset, 1024))>0) && (remain_data>0)){
+		remain_data -= sent_bytes;
+		printf("\rsent: %d\tdone: %.2f%%", sent_bytes, 100.0-(remain_data*1.0)/(file_size*1.0)*100.0);
+	}
+}
+
+const char * recv_file_name(short socket_id){
+	static char file_name[256];
+	ssize_t len = recv(socket_id, file_name, 256, 0);
+	if(len<0)
+		error("file name", 1);
+	return file_name;
+}
+
+int recv_file_size(short socket_id){
+	int file_size;
+	ssize_t len = recv(socket_id, &file_size, sizeof(file_size), 0);
+	if(len<0)
+		error("no file", 1);
+	return file_size;
+}
+
+short recv_file_amount(short socket_id){
+	short file_amount;
+	ssize_t len = recv(socket_id, &file_amount, sizeof(file_amount), 0);
+	if(len<0)
+		error("no amount", 1);
+	return file_amount;
+}
+
+void recv_file(short socket_id, char * file_name, int file_size){
+	char buffer[256];
+	ssize_t len;
+	int remain_data = file_size;
+	FILE *rec_file;
+	rec_file = fopen(file_name, "w");
+	if(rec_file == NULL)
+		error("file", 1);
+
+	while((remain_data>0) && (len = recv(socket_id, buffer, sizeof(buffer), 0))>0){
+		fwrite(buffer, sizeof(char), len, rec_file);
+		remain_data -= len;
+		printf("\rreceived: %d bytes, %d bytes remaining", len, remain_data);
+	}
+	printf("\n");
+	close(socket_id);
 }
 
 int main(int argc, char *argv[]){
 	if(argc==1)
 		return print_help();
-	else if(argc>3)
-		invalid_args();
+	
+	if(argv[1][0]=='-'){
+		if(argv[1][1]=='d'){
+			if(argc<3)
+				invalid_args();
 
-	int c = getopt(argc, argv, "dnl");
-	if(c=='d'){
-		if(argc!=3)
+			short client_socket = get_conn();
+			handshake(client_socket, FILE_DOWN);
+
+			short file_count = argc-2;
+			send_file_amount(client_socket, file_count);
+
+			int file_size;
+			for(int i=0; i<file_count; i++){
+				file_size = recv_file_size(client_socket);
+				recv_file(client_socket, argv[i+2], file_size);
+			}
+
+		}else if(argv[1][1]=='n'){
+			short file_count;
+			if(argc==2)
+				file_count = 1;
+			else if(argc==3){
+				file_count = atoi(argv[2]);
+				if(file_count<1)
+					error("file amount nan", 1);
+			}else
+				invalid_args();
+			
+			short client_socket = get_conn();
+			handshake(client_socket, FILE_NEWEST);
+
+			send_file_amount(client_socket, file_count);
+
+			char file_name[256];
+			int file_size;
+			for(int i=0; i<file_count; i++){
+				strcpy(file_name, recv_file_name(client_socket));
+				file_size = recv_file_size(client_socket);
+				recv_file(client_socket, file_name, file_size);
+			}
+			close(client_socket);
+		}else if(argv[1][1]=='l'){
+			if(argc!=2)
+				invalid_args();
+			
+			short client_socket = get_conn();
+			handshake(client_socket, FILE_LIST);
+
+			short file_amount = recv_file_amount(client_socket);
+			char file_name[256];
+			int file_size;
+			printf("%d files: \n", file_amount);
+			for(int i=0; i<file_amount; i++){
+				strcpy(file_name, recv_file_name(client_socket));
+				file_size = recv_file_size(client_socket);
+				printf("%d: %s, %d bytes", i+1, file_name, file_size);
+			}
+			
+		}else{
 			invalid_args();
-
-		int client_socket = get_conn();
-		handshake(client_socket, FILE_DOWN);
-
-		char *file_name = argv[optind];
-		ssize_t len = send(client_socket, file_name, 256, 0);
-		if(len<0)
-			error("file name", 1);
-		printf("file name: %s\n", file_name);
-
-		char f_len_buff[32];
-		recv(client_socket, f_len_buff, 32, 0);
-		int file_size = atoi(f_len_buff);
-		if(file_size<0)
-			error("no file", 1);
-		printf("file size: %d\n", file_size);
-
-		char buffer[256];
-		int remain_data = file_size;
-		FILE *rec_file;
-		rec_file = fopen(file_name, "w");
-		if(rec_file == NULL)
-			error("file", 1);
-
-		while((remain_data>0) && (len = recv(client_socket, buffer, 256, 0))>0){
-			fwrite(buffer, sizeof(char), len, rec_file);
-			remain_data -= len;
-			printf("\rreceived: %d bytes, %d bytes remaining", len, remain_data);
 		}
-		printf("\n");
-		close(client_socket);
-	}else if(c=='n'){
-
-	}else if(c=='l'){
-		printf("tutaj\n");
 	}else{
-		int client_socket = get_conn();
-
+		short client_socket = get_conn();
 		handshake(client_socket, FILE_UP);
 
 		char *file_name = argv[1];
 		fprintf(stdout, "file name: %s\n", file_name);
-		int fd = open(file_name, O_RDONLY);
+		short fd = open(file_name, O_RDONLY);
 		if(fd<0)
 			error("opening file", 1);
 		struct stat file_stat;
 		if(fstat(fd, &file_stat)<0)
 			error("fstat", 1);
 
-		char file_size[256];
-		sprintf(file_size, "%d", file_stat.st_size);
-		fprintf(stdout, "file size: %s bytes\n", file_size);
+		int file_size = file_stat.st_size;
 
-		ssize_t len = send(client_socket, file_name, 256, 0);
-		if(len<0)
-			error("file name", 1);
+		send_file_name(client_socket, file_name);
 
-		len = send(client_socket, file_size, 256, 0);
-		if(len<0)
-			error("file size", 1);
+		send_file_size(client_socket, file_size);
 
-		long offset = 0;
-		int remain_data = file_stat.st_size;
-		int sent_bytes = 0;
-		while(((sent_bytes = sendfile(client_socket, fd, &offset, 256))>0) && (remain_data>0)){
-			remain_data -= sent_bytes;
-			fprintf(stdout, "\rsent %d bytes, %d bytes remaining", sent_bytes, remain_data);
-		}
+		send_file(client_socket, fd, file_size);
+
 		printf("\n");
 		close(client_socket);
 	}
