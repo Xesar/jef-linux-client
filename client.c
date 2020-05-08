@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <ctype.h>
+#include <time.h>
 
 #define PORT_NO			20001
 #define SERVER_IP		"127.0.0.1"
@@ -131,6 +132,14 @@ short recv_file_amount(short socket_id){
 	return file_amount;
 }
 
+long recv_file_time(short socket_id){
+	long file_time;
+	ssize_t len = recv(socket_id, &file_time, sizeof(file_time), 0);
+	if(len<0)
+		error("no time", 1);
+	return file_time;
+}
+
 void recv_file(short socket_id, char * file_name, int file_size){
 	char buffer[256];
 	ssize_t len;
@@ -217,18 +226,27 @@ int main(int argc, char *argv[]){
 			short client_socket = get_conn();
 			handshake(client_socket, FILE_LIST);
 
-			char file_name[256];
-			int file_size;
 			short header = recv_header(client_socket);
 			if(header==END_HDR){
 				printf("no files on server\n");
 				close(client_socket);
 				return 0;
 			}
+
 			while(header==F_HDR){
+				char file_name[256], time_string[24];
+				int file_size;
+				long file_time;
+
 				strcpy(file_name, recv_file_name(client_socket));
 				file_size = recv_file_size(client_socket);
-				printf("%s\t\t->\t%d bytes\n", file_name, file_size);
+				file_time = recv_file_time(client_socket);
+
+				struct tm* tm_info = localtime(&file_time);
+				strftime(time_string, 24, "%d-%m-%y %H:%M:%S", tm_info);
+
+				printf("%s -> %dB, %s\n", file_name, file_size, time_string);
+				
 				header = recv_header(client_socket);
 			}
 
