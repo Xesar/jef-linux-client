@@ -78,6 +78,10 @@ void send_file_amount(short socket_id, short file_amount){
 }
 
 void send_file_name(short socket_id, char * file_name){
+	char * ptr;
+	ptr = strrchr(file_name, '/');
+	if(ptr!=NULL)
+		strcpy(file_name, ptr+1);
 	ssize_t len = send(socket_id, file_name, 256, 0);
 	if(len<0)
 		error("file name", 1);
@@ -104,6 +108,10 @@ const char * recv_file_name(short socket_id){
 	ssize_t len = recv(socket_id, file_name, 256, 0);
 	if(len<0)
 		error("file name", 1);
+	char * ptr;
+	ptr = strrchr(file_name, '/');
+	if(ptr!=NULL)
+		strcpy(file_name, ptr+1);
 	return file_name;
 }
 
@@ -212,6 +220,11 @@ int main(int argc, char *argv[]){
 			char file_name[256];
 			int file_size;
 			short header = recv_header(client_socket);
+			if(header==END_HDR){
+				printf("no files on server\n");
+				close(client_socket);
+				return 0;
+			}
 			while(header==F_HDR){
 				strcpy(file_name, recv_file_name(client_socket));
 				file_size = recv_file_size(client_socket);
@@ -242,6 +255,7 @@ int main(int argc, char *argv[]){
 				error("fstat", 1);
 
 			int file_size = file_stat.st_size;
+			
 			send_file_name(client_socket, file_name);
 			send_file_size(client_socket, file_size);
 			send_file(client_socket, fd, file_size);
