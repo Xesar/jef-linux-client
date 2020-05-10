@@ -220,12 +220,15 @@ int main(int argc, char *argv[]){
 
 			send_file_amount(client_socket, file_count);
 
-			for(int i=0; i<file_count; i++){
+			int n = recv_file_amount(client_socket);
+
+			for(int i=0; i<n; i++){
 				char file_name[256];
 				int file_size;
-				printf("%s: %d\n", recv_file_name(client_socket), recv_file_size(client_socket));
-				// file_size = recv_file_size(client_socket);
-				// recv_file(client_socket, file_name, file_size);
+
+				strcpy(file_name, recv_file_name(client_socket));
+				file_size = recv_file_size(client_socket);
+				recv_file(client_socket, file_name, file_size);
 			}
 
 			close(client_socket);
