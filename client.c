@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <ctype.h>
+#include <time.h>
 
 #define PORT_NO			20001
 #define SERVER_IP		"127.0.0.1"
@@ -20,9 +21,6 @@
 #define FILE_DOWN		1
 #define FILE_NEWEST		2
 #define FILE_LIST		3
-
-#define F_HDR			0
-#define END_HDR			9
 
 void error(const char *msg, char end){
 	perror(msg);
@@ -123,6 +121,14 @@ int recv_file_size(short socket_id){
 	return file_size;
 }
 
+long recv_file_time(short socket_id){
+	long file_time;
+	ssize_t len = recv(socket_id, &file_time, sizeof(file_time), 0);
+	if(len<0)
+		error("no time", 1);
+	return file_time;
+}
+
 short recv_file_amount(short socket_id){
 	short file_amount;
 	ssize_t len = recv(socket_id, &file_amount, sizeof(file_amount), 0);
@@ -172,15 +178,6 @@ void recv_file(short socket_id, char * file_name, int file_size){
 	fclose(rec_file);
 }
 
-short recv_header(short socket_id){
-	short header;
-	ssize_t len = recv(socket_id, &header, sizeof(header), 0);
-	if(len<0)
-		error("handshake", 1);
-	header ^= 0xf110;
-	return header;
-}
-
 int main(int argc, char *argv[]){
 	if(argc==1)
 		return print_help();
@@ -223,12 +220,12 @@ int main(int argc, char *argv[]){
 
 			send_file_amount(client_socket, file_count);
 
-			char file_name[256];
-			int file_size;
 			for(int i=0; i<file_count; i++){
-				strcpy(file_name, recv_file_name(client_socket));
-				file_size = recv_file_size(client_socket);
-				recv_file(client_socket, file_name, file_size);
+				char file_name[256];
+				int file_size;
+				printf("%s: %d\n", recv_file_name(client_socket), recv_file_size(client_socket));
+				// file_size = recv_file_size(client_socket);
+				// recv_file(client_socket, file_name, file_size);
 			}
 
 			close(client_socket);
@@ -240,19 +237,22 @@ int main(int argc, char *argv[]){
 			short client_socket = get_conn();
 			handshake(client_socket, FILE_LIST);
 
-			char file_name[256];
-			int file_size;
-			short header = recv_header(client_socket);
-			if(header==END_HDR){
-				printf("no files on server\n");
-				close(client_socket);
-				return 0;
-			}
-			while(header==F_HDR){
+			int n = recv_file_amount(client_socket);
+
+			for(int i=0; i<n; i++){
+				char file_name[256], date[26];
+				int file_size;
+				long file_time;
+				struct tm* file_time_struct;
+
 				strcpy(file_name, recv_file_name(client_socket));
 				file_size = recv_file_size(client_socket);
-				printf("%s\t\t->\t%d bytes\n", file_name, file_size);
-				header = recv_header(client_socket);
+				file_time = recv_file_time(client_socket);
+
+				file_time_struct = localtime(&file_time);
+				strftime(date, 26, "%d-%m-%Y %H:%M:%S", file_time_struct);
+
+				printf("%s -> %d bytes, %s\n", file_name, file_size, date);
 			}
 
 			close(client_socket);
