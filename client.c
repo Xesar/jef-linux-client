@@ -21,6 +21,7 @@
 #define FILE_DOWN		1
 #define FILE_NEWEST		2
 #define FILE_LIST		3
+#define FILE_LISTALL	4
 
 void error(const char *msg, char end){
 	perror(msg);
@@ -35,6 +36,7 @@ int print_help(){
 		"-d <file_name>\t-> download file from server\n"
 		"-n [number]\t-> download n latest files from server, default 1\n"
 		"-l\t\t-> list files on the server uploade in less than x hours (specified by server configuration)\n"
+		"-a\t\t-> list all files on the server\n"
 		"-r <file_name>\t-> remove file from server\n"
 	);
 	return 0;
@@ -233,12 +235,16 @@ int main(int argc, char *argv[]){
 
 			close(client_socket);
 
-		}else if(argv[1][1]=='l'){
+		}else if(argv[1][1]=='l' || argv[1][1]=='a'){
 			if(argc!=2)
 				invalid_args();
 			
 			short client_socket = get_conn();
-			handshake(client_socket, FILE_LIST);
+
+			if(argv[1][1]=='l')
+				handshake(client_socket, FILE_LIST);
+			else
+				handshake(client_socket,FILE_LISTALL);
 
 			int n = recv_file_amount(client_socket);
 
